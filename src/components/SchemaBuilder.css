@@ -1,0 +1,159 @@
+.schema-builder {
+  border: 1px solid #2d3748;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0f1117;
+}
+
+.schema-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #1a1f2e;
+  border-bottom: 1px solid #2d3748;
+}
+
+.schema-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.add-field-btn {
+  background: #2b4a7e;
+  color: #63b3ed;
+  border: 1px solid #3182ce;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.add-field-btn:hover { background: #2c5282; }
+
+.schema-body {
+  padding: 8px;
+  min-height: 50px;
+}
+
+.schema-empty {
+  text-align: center;
+  color: #4a5568;
+  font-size: 12px;
+  padding: 16px;
+}
+
+.schema-field {
+  margin-bottom: 4px;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 4px;
+  transition: background 0.1s;
+}
+
+.field-row:hover { background: #1a1f2e; }
+
+.field-indent { display: inline-block; }
+
+.field-collapse-icon { color: #718096; font-size: 10px; }
+
+.field-key-input {
+  background: #2d3748;
+  border: 1px solid #4a5568;
+  color: #a0aec0;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  width: 110px;
+}
+
+.field-colon { color: #718096; font-size: 12px; }
+
+.field-type-select {
+  background: #1a1f2e;
+  border: 1px solid #4a5568;
+  color: #68d391;
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+}
+
+.field-type-select:focus { border-color: #4299e1; }
+
+.field-type-tag {
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+
+.object-tag {
+  background: #2d3748;
+  color: #f6ad55;
+  border: 1px solid #744210;
+}
+
+.field-remove-btn {
+  background: transparent;
+  border: none;
+  color: #fc8181;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.field-remove-btn:hover { opacity: 1; background: #2d1515; }
+
+.nested-fields {
+  margin-left: 24px;
+  border-left: 2px solid #2d3748;
+  padding-left: 8px;
+  margin-top: 4px;
+}
+
+.add-nested-btn {
+  background: transparent;
+  border: 1px dashed #2d3748;
+  color: #4a5568;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: all 0.15s;
+}
+
+.add-nested-btn:hover {
+  border-color: #4299e1;
+  color: #63b3ed;
+}
+
+.schema-preview {
+  background: #0a0d14;
+  border-top: 1px solid #1a1f2e;
+  padding: 8px 12px;
+}
+
+.schema-preview pre {
+  font-family: 'Consolas', monospace;
+  font-size: 11px;
+  color: #4a5568;
+  white-space: pre-wrap;
+  max-height: 80px;
+  overflow: auto;
+}

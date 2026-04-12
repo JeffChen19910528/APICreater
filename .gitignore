@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# React build output
+build/
+
+# Electron builder output
+dist/
+
+# Logs
+launcher.log
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Env
+.env
+.env.local

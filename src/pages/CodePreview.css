@@ -1,0 +1,169 @@
+.code-preview {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.preview-sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #131720;
+  border-right: 1px solid #2d3748;
+  display: flex;
+  flex-direction: column;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #2d3748;
+}
+
+.preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.refresh-btn {
+  background: transparent;
+  border: 1px solid #2d3748;
+  color: #718096;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.refresh-btn:hover:not(:disabled) { border-color: #4299e1; color: #63b3ed; }
+.refresh-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.file-tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.preview-error {
+  padding: 16px;
+  color: #fc8181;
+  font-size: 12px;
+  text-align: center;
+}
+
+.file-group { margin-bottom: 12px; }
+
+.file-group-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4a5568;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  padding: 4px 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #718096;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+}
+
+.file-item:hover { background: #1a1f2e; color: #a0aec0; }
+.file-item.active { background: #1a2744; color: #63b3ed; }
+
+.file-icon {
+  font-size: 11px;
+  font-family: monospace;
+  color: #f6ad55;
+}
+
+.file-name {
+  font-family: 'Consolas', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Code Area ── */
+.code-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0d14;
+}
+
+.code-tab-bar {
+  display: flex;
+  background: #131720;
+  border-bottom: 1px solid #2d3748;
+  padding: 0 0 0 0;
+}
+
+.code-tab {
+  padding: 10px 20px;
+  font-size: 12px;
+  font-family: 'Consolas', monospace;
+  color: #a0aec0;
+  border-bottom: 2px solid #4299e1;
+  border-right: 1px solid #2d3748;
+}
+
+.code-tab.active { color: #63b3ed; }
+
+.code-scroll {
+  flex: 1;
+  overflow: auto;
+  padding: 20px;
+}
+
+.code-content {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #e2e8f0;
+  white-space: pre;
+  tab-size: 2;
+}
+
+.hl-kw       { color: #63b3ed; }
+.hl-str      { color: #68d391; }
+.hl-num      { color: #f6ad55; }
+.hl-comment  { color: #4a5568; font-style: italic; }
+.hl-decorator{ color: #b794f4; }
+.hl-type     { color: #fc8181; }
+.hl-key      { color: #63b3ed; }
+
+.lang-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  background: #2d3748;
+  color: #718096;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.code-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #4a5568;
+  font-size: 14px;
+}

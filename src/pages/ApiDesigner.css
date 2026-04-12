@@ -1,0 +1,257 @@
+.api-designer {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Left Panel ── */
+.api-list-panel {
+  width: 280px;
+  min-width: 280px;
+  background: #131720;
+  border-right: 1px solid #2d3748;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid #2d3748;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.add-api-btn {
+  background: #2b4a7e;
+  color: #63b3ed;
+  border: 1px solid #3182ce;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.add-api-btn:hover { background: #2c5282; }
+
+.api-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 16px;
+  gap: 8px;
+}
+
+.empty-icon { font-size: 36px; }
+.empty-text { font-size: 14px; color: #4a5568; font-weight: 600; }
+.empty-sub { font-size: 12px; color: #2d3748; text-align: center; }
+
+.api-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+  margin-bottom: 4px;
+}
+
+.api-list-item:hover { background: #1a1f2e; }
+
+.api-list-item.active {
+  background: #1a2744;
+  border-color: #3182ce;
+}
+
+.method-badge {
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 6px;
+  letter-spacing: 0.5px;
+  min-width: 48px;
+  text-align: center;
+}
+
+.api-path {
+  flex: 1;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  color: #a0aec0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.api-delete-btn {
+  background: transparent;
+  border: none;
+  color: #fc8181;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.api-list-item:hover .api-delete-btn { opacity: 0.6; }
+.api-list-item:hover .api-delete-btn:hover { opacity: 1; }
+
+/* ── Right Panel ── */
+.api-editor-panel {
+  flex: 1;
+  overflow-y: auto;
+  background: #0f1117;
+}
+
+.no-selection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 12px;
+}
+
+.no-sel-icon { font-size: 48px; opacity: 0.3; }
+.no-sel-text { font-size: 15px; color: #4a5568; }
+
+.editor-content {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #2d3748;
+}
+
+.editor-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.unsaved-badge {
+  font-size: 11px;
+  color: #f6ad55;
+  background: #2d1e00;
+  border: 1px solid #744210;
+  border-radius: 10px;
+  padding: 2px 10px;
+}
+
+.save-btn {
+  background: #276749;
+  color: #68d391;
+  border: 1px solid #2f855a;
+  border-radius: 6px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.save-btn:hover { background: #2f855a; }
+
+.form-row { display: flex; gap: 16px; }
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.method-group { flex: none; }
+.path-group { flex: 1; }
+
+.form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.form-input {
+  background: #1a1f2e;
+  border: 1px solid #2d3748;
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  font-family: 'Consolas', monospace;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.form-input:focus { border-color: #4299e1; }
+
+.method-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.method-btn {
+  border: 1px solid #2d3748;
+  background: transparent;
+  color: #718096;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+}
+
+.method-btn:hover { background: #2d3748; color: #e2e8f0; }
+.method-btn.selected { font-weight: 800; }
+
+.schema-row {
+  display: flex;
+  gap: 16px;
+}
+
+.schema-col { flex: 1; }
+
+.api-summary {
+  padding: 10px 14px;
+  background: #1a1f2e;
+  border-radius: 8px;
+  font-family: 'Consolas', monospace;
+  font-size: 13px;
+  border: 1px solid #2d3748;
+}

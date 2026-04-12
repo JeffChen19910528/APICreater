@@ -1,0 +1,60 @@
+{
+  "name": "desktop-api-generator",
+  "version": "1.0.0",
+  "description": "No-Code RESTful API Generator Desktop App",
+  "main": "main/main.js",
+  "homepage": "./",
+  "scripts": {
+    "launch": "node launcher.js",
+    "test:all": "node tests/run-tests.js",
+    "test:node": "node --test tests/nodejs.test.js",
+    "test:python": "node --test tests/python.test.js",
+    "test:csharp": "node --test tests/csharp.test.js",
+    "test:integration": "node --test tests/integration.test.js",
+    "start": "electron .",
+    "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && electron .\"",
+    "build:react": "react-scripts build",
+    "build": "npm run build:react && electron-builder",
+    "test": "react-scripts test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "ejs": "^3.1.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.apicreateer.desktop",
+    "productName": "API Generator",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "build/**/*",
+      "main/**/*",
+      "generator/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    }
+  },
+  "browserslist": {
+    "production": [">0.2%", "not dead", "not op_mini all"],
+    "development": ["last 1 chrome version", "last 1 firefox version", "last 1 safari version"]
+  }
+}
