@@ -3,6 +3,7 @@ const path = require('path');
 const ejs = require('ejs');
 const { buildPythonFiles } = require('./pythonBuilder');
 const { buildCsharpFiles } = require('./csharpBuilder');
+const { buildJavaFiles }   = require('./javaBuilder');
 
 // ─── EJS Templates (Node.js / Express) ───────────────────────────────────────
 
@@ -192,6 +193,7 @@ function buildFiles(apis, projectName, language, version) {
   switch (language) {
     case 'python': return buildPythonFiles(apis, projectName, version);
     case 'csharp': return buildCsharpFiles(apis, projectName, version);
+    case 'java':   return buildJavaFiles(apis, projectName, version);
     default:       return buildNodeFiles(apis, projectName, version);
   }
 }

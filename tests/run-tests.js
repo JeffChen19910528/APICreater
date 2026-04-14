@@ -25,14 +25,16 @@ const TEST_FILES = [
   { name: 'Node.js Generator',  file: 'tests/nodejs.test.js' },
   { name: 'Python Generator',   file: 'tests/python.test.js' },
   { name: 'C# Generator',       file: 'tests/csharp.test.js' },
+  { name: 'Java Generator',     file: 'tests/java.test.js' },
   { name: 'Integration (磁碟)', file: 'tests/integration.test.js' },
   { name: '版本差異測試',        file: 'tests/version.test.js' }
 ];
 
 console.log('');
-console.log(`${C.bold}${C.cyan}╔══════════════════════════════════════╗${C.reset}`);
-console.log(`${C.bold}${C.cyan}║     API Generator — 測試套件         ║${C.reset}`);
-console.log(`${C.bold}${C.cyan}╚══════════════════════════════════════╝${C.reset}`);
+console.log(`${C.bold}${C.cyan}╔════════════════════════════════════════╗${C.reset}`);
+console.log(`${C.bold}${C.cyan}║   API Generator — 測試套件 v2          ║${C.reset}`);
+console.log(`${C.bold}${C.cyan}║   Node.js / Python / C# / Java         ║${C.reset}`);
+console.log(`${C.bold}${C.cyan}╚════════════════════════════════════════╝${C.reset}`);
 console.log('');
 
 let totalPass = 0;

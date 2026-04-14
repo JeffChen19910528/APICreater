@@ -40,6 +40,21 @@ export const LANGUAGE_VERSIONS = {
       badge: 'Legacy'
     }
   ],
+  java: [
+    {
+      value: 'springboot3',
+      label: 'Spring Boot 3.2 (Java 17)',
+      description: 'Java 17+ · Jakarta EE，效能最佳，長期維護',
+      badge: 'Latest',
+      default: true
+    },
+    {
+      value: 'springboot2',
+      label: 'Spring Boot 2.7 (Java 11)',
+      description: 'Java 11+ · 廣泛企業部署，javax.* 套件',
+      badge: 'Stable'
+    }
+  ],
   csharp: [
     {
       value: 'net8',

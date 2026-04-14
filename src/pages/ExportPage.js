@@ -7,19 +7,22 @@ const isElectron = () => typeof window !== 'undefined' && window.electronAPI;
 const LANG_LABELS = {
   nodejs: 'Node.js (Express)',
   python: 'Python (FastAPI)',
-  csharp: 'C# (ASP.NET Core)'
+  csharp: 'C# (ASP.NET Core)',
+  java:   'Java (Spring Boot)'
 };
 
 const START_COMMANDS = {
   nodejs: 'npm install && npm start',
   python: 'pip install -r requirements.txt && uvicorn main:app --reload',
-  csharp: 'dotnet restore && dotnet run'
+  csharp: 'dotnet restore && dotnet run',
+  java:   'mvn spring-boot:run'
 };
 
 const DEFAULT_PORTS = {
   nodejs: 'http://localhost:3000',
   python: 'http://localhost:8000/docs',
-  csharp: 'https://localhost:7000/swagger'
+  csharp: 'https://localhost:7000/swagger',
+  java:   'http://localhost:8080/swagger-ui.html'
 };
 
 export default function ExportPage({ apis, projectName, language, version, onNavigate }) {

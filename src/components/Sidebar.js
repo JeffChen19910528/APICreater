@@ -11,7 +11,8 @@ const NAV_ITEMS = [
 const LANGUAGES = [
   { value: 'nodejs',  label: 'Node.js (Express)' },
   { value: 'python',  label: 'Python (FastAPI)'   },
-  { value: 'csharp',  label: 'C# (ASP.NET Core)'  }
+  { value: 'csharp',  label: 'C# (ASP.NET Core)'  },
+  { value: 'java',    label: 'Java (Spring Boot)'  }
 ];
 
 export default function Sidebar({

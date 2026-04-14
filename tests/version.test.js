@@ -194,3 +194,61 @@ describe('C# 版本差異 — Minimal Hosting vs Startup.cs', () => {
     }
   });
 });
+
+// ─── Java 版本差異 ────────────────────────────────────────────────────────────
+
+describe('Java 版本差異 — Spring Boot 3 vs 2', () => {
+
+  it('springboot3: pom.xml 應使用 Spring Boot 3.2.0', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot3' });
+    assert.ok(files['pom.xml'].includes('3.2.0'), 'Spring Boot 版本應為 3.2.0');
+  });
+
+  it('springboot2: pom.xml 應使用 Spring Boot 2.7.18', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot2' });
+    assert.ok(files['pom.xml'].includes('2.7.18'), 'Spring Boot 版本應為 2.7.18');
+  });
+
+  it('springboot3: Java 版本應為 17', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot3' });
+    assert.ok(files['pom.xml'].includes('<java.version>17</java.version>'), 'Java 版本應為 17');
+  });
+
+  it('springboot2: Java 版本應為 11', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot2' });
+    assert.ok(files['pom.xml'].includes('<java.version>11</java.version>'), 'Java 版本應為 11');
+  });
+
+  it('springboot3: springdoc 應使用 2.x 版本', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot3' });
+    assert.ok(files['pom.xml'].includes('2.3.0'), 'springdoc 應為 2.3.0');
+  });
+
+  it('springboot2: springdoc 應使用 1.x 版本', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot2' });
+    assert.ok(files['pom.xml'].includes('1.7.0'), 'springdoc 應為 1.7.0');
+  });
+
+  it('springboot3 README 應提及 Spring Boot 3.2 和 Java 17', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot3' });
+    const readme = files['README.md'];
+    assert.ok(readme.includes('3.2') || readme.includes('Java 17'), 'README 應提及版本資訊');
+  });
+
+  it('springboot2 README 應提及 Spring Boot 2.7 和 Java 11', async () => {
+    const files = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot2' });
+    const readme = files['README.md'];
+    assert.ok(readme.includes('2.7') || readme.includes('Java 11'), 'README 應提及版本資訊');
+  });
+
+  it('兩版本 Controller 結構應相同（標註相容）', async () => {
+    const v3 = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot3' });
+    const v2 = await generatePreview({ apis: BASIC_APIS, projectName: 'Test', language: 'java', version: 'springboot2' });
+    const ctrlKey3 = Object.keys(v3).find(k => k.includes('UsersController.java'));
+    const ctrlKey2 = Object.keys(v2).find(k => k.includes('UsersController.java'));
+    assert.ok(v3[ctrlKey3].includes('@RestController'), 'v3 應有 @RestController');
+    assert.ok(v2[ctrlKey2].includes('@RestController'), 'v2 應有 @RestController');
+    assert.ok(v3[ctrlKey3].includes('@GetMapping'), 'v3 應有 @GetMapping');
+    assert.ok(v2[ctrlKey2].includes('@GetMapping'), 'v2 應有 @GetMapping');
+  });
+});

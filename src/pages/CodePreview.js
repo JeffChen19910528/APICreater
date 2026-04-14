@@ -40,6 +40,17 @@ function highlightCsharp(code) {
     .replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-num">$1</span>');
 }
 
+function highlightJava(code) {
+  if (!code) return '';
+  return escapeHtml(code)
+    .replace(/(\/\/[^\n]*)/g, '<span class="hl-comment">$1</span>')
+    .replace(/\b(package|import|public|private|protected|class|interface|extends|implements|new|return|if|else|for|while|void|static|final|null|true|false|this|super|throws|throw)\b/g, '<span class="hl-kw">$1</span>')
+    .replace(/(@\w+)/g, '<span class="hl-decorator">$1</span>')
+    .replace(/\b(String|Integer|Double|Boolean|Object|List|Map|ResponseEntity|RestController|GetMapping|PostMapping|PutMapping|PatchMapping|DeleteMapping|RequestMapping|PathVariable|RequestBody|SpringApplication)\b/g, '<span class="hl-type">$1</span>')
+    .replace(/("(?:[^"\\]|\\.)*")/g, '<span class="hl-str">$1</span>')
+    .replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-num">$1</span>');
+}
+
 function highlightJson(code) {
   if (!code) return '';
   return escapeHtml(code)
@@ -60,10 +71,12 @@ function highlightXml(code) {
 function highlight(code, language, filename) {
   if (!code) return '';
   if (filename && filename.endsWith('.json')) return highlightJson(code);
-  if (filename && filename.endsWith('.csproj')) return highlightXml(code);
+  if (filename && (filename.endsWith('.csproj') || filename.endsWith('.xml') || filename === 'pom.xml')) return highlightXml(code);
+  if (filename && filename.endsWith('.properties')) return highlightJson(code);
   switch (language) {
     case 'python': return highlightPython(code);
     case 'csharp': return highlightCsharp(code);
+    case 'java':   return highlightJava(code);
     default:       return highlightJS(code);
   }
 }
@@ -265,10 +278,91 @@ function generateCsharpFallback(apis, projectName) {
   return files;
 }
 
+// Java fallback
+function toJavaType(val) {
+  const map = { string: 'String', int: 'Integer', number: 'Double', boolean: 'Boolean', array: 'java.util.List<Object>' };
+  return map[val] || 'Object';
+}
+function toJavaDefault(val) {
+  const map = { string: '"example"', int: '0', number: '0.0', boolean: 'false', array: 'new java.util.ArrayList<>()' };
+  return map[val] || 'null';
+}
+function toJavaCamel(str) {
+  const p = toPascal(str);
+  return p.charAt(0).toLowerCase() + p.slice(1);
+}
+function toJavaActionCamel(method, path) {
+  const parts = path.replace(/^\//, '').split('/').map(p =>
+    p.startsWith(':') ? 'By' + toPascal(p.slice(1)) : toPascal(p)
+  );
+  return toJavaCamel(method.toLowerCase() + parts.slice(1).join(''));
+}
+function httpJavaAnn(method) {
+  return { GET: '@GetMapping', POST: '@PostMapping', PUT: '@PutMapping', PATCH: '@PatchMapping', DELETE: '@DeleteMapping' }[method] || '@GetMapping';
+}
+function toSpringPath(path) { return path.replace(/:(\w+)/g, '{$1}'); }
+
+function generateJavaFallback(apis, projectName) {
+  const files = {};
+  const groups = groupByResource(apis);
+  const packageName = `com.${projectName.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
+  const basePath = `src/main/java/${packageName.replace(/\./g, '/')}`;
+
+  files['pom.xml'] = `<?xml version="1.0" encoding="UTF-8"?>\n<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">\n  <modelVersion>4.0.0</modelVersion>\n  <parent>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-parent</artifactId>\n    <version>3.2.0</version>\n    <relativePath/>\n  </parent>\n  <groupId>${packageName}</groupId>\n  <artifactId>${projectName.toLowerCase().replace(/[^a-z0-9\-]/g, '-')}</artifactId>\n  <version>0.0.1-SNAPSHOT</version>\n  <properties><java.version>17</java.version></properties>\n  <dependencies>\n    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>\n    <dependency><groupId>org.springdoc</groupId><artifactId>springdoc-openapi-starter-webmvc-ui</artifactId><version>2.3.0</version></dependency>\n  </dependencies>\n  <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>\n</project>\n`;
+
+  files[`${basePath}/Application.java`] = `package ${packageName};\n\nimport org.springframework.boot.SpringApplication;\nimport org.springframework.boot.autoconfigure.SpringBootApplication;\n\n@SpringBootApplication\npublic class Application {\n    public static void main(String[] args) {\n        SpringApplication.run(Application.class, args);\n    }\n}\n`;
+  files['src/main/resources/application.properties'] = `server.port=8080\nspring.application.name=${projectName}\nspringdoc.swagger-ui.path=/swagger-ui.html\n`;
+
+  for (const [resource, endpoints] of Object.entries(groups)) {
+    const ctrl = toPascal(resource);
+    const controllerPkg = `${packageName}.controller`;
+    const modelPkg = `${packageName}.model`;
+    const controllerPath = `${basePath}/controller`;
+    const modelPath = `${basePath}/model`;
+
+    let ctrlContent = `package ${controllerPkg};\n\nimport org.springframework.web.bind.annotation.*;\nimport org.springframework.http.ResponseEntity;\n\n@RestController\n@RequestMapping("/${resource}")\npublic class ${ctrl}Controller {\n\n`;
+
+    endpoints.forEach(ep => {
+      const action = toJavaActionCamel(ep.method, ep.path);
+      const actionPascal = toPascal(action);
+      const subPath = toSpringPath(ep.path.replace(new RegExp(`^/?${resource}`), '') || '');
+      const pathParams = (ep.path.match(/:(\w+)/g) || []).map(p => `@PathVariable String ${p.slice(1)}`);
+      const hasBody = ['POST', 'PUT', 'PATCH'].includes(ep.method) && ep.requestSchema && Object.keys(ep.requestSchema).length > 0;
+
+      // Model files
+      if (ep.requestSchema && Object.keys(ep.requestSchema).length > 0) {
+        const fields = Object.entries(ep.requestSchema).map(([k, v]) => `    private ${toJavaType(v)} ${toJavaCamel(k)} = ${toJavaDefault(v)};`).join('\n');
+        const getsets = Object.entries(ep.requestSchema).map(([k, v]) => `    public ${toJavaType(v)} get${toPascal(k)}() { return ${toJavaCamel(k)}; }\n    public void set${toPascal(k)}(${toJavaType(v)} ${toJavaCamel(k)}) { this.${toJavaCamel(k)} = ${toJavaCamel(k)}; }`).join('\n\n');
+        files[`${modelPath}/${actionPascal}Request.java`] = `package ${modelPkg};\n\npublic class ${actionPascal}Request {\n${fields}\n\n${getsets}\n}\n`;
+      }
+      if (ep.responseSchema && Object.keys(ep.responseSchema).length > 0) {
+        const fields = Object.entries(ep.responseSchema).map(([k, v]) => `    private ${toJavaType(v)} ${toJavaCamel(k)} = ${toJavaDefault(v)};`).join('\n');
+        const getsets = Object.entries(ep.responseSchema).map(([k, v]) => `    public ${toJavaType(v)} get${toPascal(k)}() { return ${toJavaCamel(k)}; }\n    public void set${toPascal(k)}(${toJavaType(v)} ${toJavaCamel(k)}) { this.${toJavaCamel(k)} = ${toJavaCamel(k)}; }`).join('\n\n');
+        files[`${modelPath}/${actionPascal}Response.java`] = `package ${modelPkg};\n\npublic class ${actionPascal}Response {\n${fields}\n\n${getsets}\n}\n`;
+      }
+
+      const params = [...pathParams, hasBody ? `@RequestBody ${actionPascal}Request body` : null].filter(Boolean).join(', ');
+      const routeAttr = subPath ? `("${subPath}")` : '';
+      const retEntries = ep.responseSchema && Object.keys(ep.responseSchema).length > 0
+        ? Object.entries(ep.responseSchema).map(([k, v]) => `"${toJavaCamel(k)}", ${toJavaDefault(v)}`).join(', ')
+        : '"message", "ok"';
+      const retVal = `java.util.Map.of(${retEntries})`;
+
+      ctrlContent += `    ${httpJavaAnn(ep.method)}${routeAttr}\n    public ResponseEntity<?> ${action}(${params}) {\n        return ResponseEntity.ok(${retVal});\n    }\n\n`;
+    });
+
+    ctrlContent += `}\n`;
+    files[`${controllerPath}/${ctrl}Controller.java`] = ctrlContent;
+  }
+  files['README.md'] = `# ${projectName}\n\nGenerated by **API Generator** — Java Spring Boot 3.2.\n\n## Getting Started\n\n\`\`\`bash\nmvn spring-boot:run\n\`\`\`\n\nSwagger UI: http://localhost:8080/swagger-ui.html\n`;
+  return files;
+}
+
 function generateClientSide(apis, projectName, language) {
   switch (language) {
     case 'python': return generatePythonFallback(apis, projectName);
     case 'csharp': return generateCsharpFallback(apis, projectName);
+    case 'java':   return generateJavaFallback(apis, projectName);
     default:       return generateNodeFallback(apis, projectName);
   }
 }
@@ -289,6 +383,14 @@ function getFileGroups(files, language) {
       'Root': keys.filter(f => !f.includes('/')),
       'Controllers': keys.filter(f => f.startsWith('Controllers/')),
       'Models': keys.filter(f => f.startsWith('Models/'))
+    };
+  }
+  if (language === 'java') {
+    return {
+      'Root': keys.filter(f => !f.includes('/') || f === 'pom.xml'),
+      'Application': keys.filter(f => f.endsWith('Application.java') || f.endsWith('application.properties')),
+      'Controllers': keys.filter(f => f.includes('/controller/')),
+      'Models': keys.filter(f => f.includes('/model/'))
     };
   }
   return {
@@ -340,7 +442,7 @@ export default function CodePreview({ apis, projectName, language, version }) {
 
   const fileGroups = getFileGroups(files, language);
 
-  const langLabel = { nodejs: 'Node.js', python: 'Python', csharp: 'C#' }[language] || language;
+  const langLabel = { nodejs: 'Node.js', python: 'Python', csharp: 'C#', java: 'Java' }[language] || language;
 
   return (
     <div className="code-preview">
@@ -402,9 +504,11 @@ export default function CodePreview({ apis, projectName, language, version }) {
 function fileIcon(filename) {
   if (filename.endsWith('.py')) return 'py';
   if (filename.endsWith('.cs')) return 'cs';
+  if (filename.endsWith('.java')) return 'java';
   if (filename.endsWith('.json')) return '{}';
-  if (filename.endsWith('.csproj')) return 'xml';
+  if (filename.endsWith('.csproj') || filename === 'pom.xml') return 'xml';
   if (filename.endsWith('.txt')) return 'txt';
   if (filename.endsWith('.md')) return 'md';
+  if (filename.endsWith('.properties')) return 'cfg';
   return 'js';
 }

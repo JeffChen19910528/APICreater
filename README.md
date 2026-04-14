@@ -2,7 +2,7 @@
 
 **No-Code RESTful API Generator** — 不需寫程式碼，透過 GUI 設計 REST API，即時預覽，一鍵產生可部署專案。
 
-支援三種語言 × 多個版本：**Node.js (Express 4/5)**、**Python (FastAPI + Pydantic v1/v2)**、**C# (ASP.NET Core 3.1 / 5 / 6 / 8)**
+支援四種語言 × 多個版本：**Node.js (Express 4/5)**、**Python (FastAPI + Pydantic v1/v2)**、**C# (ASP.NET Core 3.1 / 5 / 6 / 8)**、**Java (Spring Boot 2.7 / 3.2)**
 
 ---
 
@@ -13,7 +13,7 @@
 | API 設計器 | 視覺化新增／編輯 REST API（Method、Path、Description） |
 | Schema Builder | 設定 Request / Response JSON 結構，支援 nested object、型別選單 |
 | **版本選擇** | 依語言選擇 Framework 版本，相容舊伺服器部署環境 |
-| 程式碼預覽 | 即時瀏覽產生的所有檔案，含語法高亮（JS / Python / C#） |
+| 程式碼預覽 | 即時瀏覽產生的所有檔案，含語法高亮（JS / Python / C# / Java） |
 | 匯出專案 | 選擇資料夾，一鍵輸出完整可執行專案（三種語言皆支援） |
 
 ---
@@ -48,6 +48,13 @@
 
 > net31 會額外產生 `Startup.cs`（含 `ConfigureServices` + `Configure`）
 
+### Java (Spring Boot)
+
+| 版本 | 徽章 | 最低需求 | 說明 |
+|------|------|---------|------|
+| `springboot3`（預設） | Latest | Java 17+ | Spring Boot 3.2 · Jakarta EE，springdoc 2.x |
+| `springboot2` | Stable | Java 11+ | Spring Boot 2.7 · javax.*，springdoc 1.x |
+
 ---
 
 ## 技術架構
@@ -58,9 +65,10 @@ Electron (桌面容器)
  │     ├── main/main.js          — 視窗管理、IPC handlers、檔案系統
  │     ├── main/preload.js       — contextBridge 安全橋接
  │     └── generator/
- │           ├── codeBuilder.js  — 入口，依語言 + 版本分派
+ │           ├── codeBuilder.js   — 入口，依語言 + 版本分派
  │           ├── pythonBuilder.js — Python FastAPI 產生器（Pydantic v1/v2）
- │           └── csharpBuilder.js — C# ASP.NET Core 產生器（net8/6/5/3.1）
+ │           ├── csharpBuilder.js — C# ASP.NET Core 產生器（net8/6/5/3.1）
+ │           └── javaBuilder.js   — Java Spring Boot 產生器（3.2 / 2.7）
  └── Renderer (React UI)
        ├── src/utils/
        │     └── versions.js      — 版本設定（各語言可選版本、徽章、描述）
@@ -137,7 +145,7 @@ npm run build
 
 在左側側欄：
 - 點擊專案名稱旁的 ✏ 圖示，輸入你的專案名稱
-- 點擊語言按鈕選擇目標語言（`Node.js` / `Python` / `C#`）
+- 點擊語言按鈕選擇目標語言（`Node.js` / `Python` / `C#` / `Java`）
 - 從版本卡片選擇部署版本（預設為最新穩定版）
 
 ### Step 2 — 設計 API
@@ -179,6 +187,13 @@ Program.cs / *.csproj / appsettings.json / Controllers/ / Models/
 **C#（net31）：**
 ```
 Program.cs / Startup.cs / *.csproj / appsettings.json / Controllers/ / Models/
+```
+
+**Java (Spring Boot)：**
+```
+pom.xml / src/main/java/{package}/Application.java
+src/main/java/{package}/controller/ / src/main/java/{package}/model/
+src/main/resources/application.properties
 ```
 
 ### Step 4 — 匯出專案
@@ -271,6 +286,31 @@ dotnet run                  # https://localhost:5001
 
 ---
 
+### Java (Spring Boot 3.2 / 2.7)
+
+```
+my-api/
+  pom.xml                   ← Maven 建置，依版本設定 Spring Boot 3.2.0 或 2.7.18
+  src/main/java/com/myapi/
+    Application.java        ← @SpringBootApplication 入口
+    controller/
+      UsersController.java  ← @RestController + HTTP method annotations
+    model/
+      GetUsersResponse.java ← POJO（private fields + getter/setter）
+      PostUsersRequest.java
+  src/main/resources/
+    application.properties  ← server.port=8080 + springdoc 路徑設定
+  README.md
+```
+
+啟動：
+```bash
+mvn spring-boot:run         # http://localhost:8080
+                            # Swagger UI: http://localhost:8080/swagger-ui.html
+```
+
+---
+
 ## 測試
 
 ```bash
@@ -282,9 +322,10 @@ node tests/run-tests.js
 | Node.js Generator | 15 |
 | Python Generator | 21 |
 | C# Generator | 23 |
+| Java Generator | 26 |
 | Integration（磁碟寫檔） | 13 |
-| 版本差異測試 | 25 |
-| **總計** | **97** |
+| 版本差異測試（含 Java） | 34 |
+| **總計** | **132** |
 
 ---
 
@@ -305,6 +346,12 @@ A: pydantic2 使用 `async def`、`list[Any]`（Python 3.10+ 原生泛型）；p
 **Q: 產生的 C# 專案，net31 和 net8 有什麼差別？**  
 A: net31 使用 `Startup.cs` 模式（`ConfigureServices` + `Configure`）；net8/6/5 使用 Minimal Hosting（`WebApplication.CreateBuilder`）。
 
+**Q: 產生的 Java 專案，Spring Boot 3 和 2 有什麼差別？**  
+A: Spring Boot 3.2 需要 Java 17+，使用 `jakarta.*` 套件與 springdoc 2.x；Spring Boot 2.7 需要 Java 11+，使用 `javax.*` 套件與 springdoc 1.x。
+
+**Q: 產生的 Java 專案如何執行？**  
+A: 需先安裝 **Java 17+**（springboot3）或 **Java 11+**（springboot2）與 **Maven 3.6+**，然後執行 `mvn spring-boot:run`。
+
 **Q: 產生的 C# 專案如何加入資料庫？**  
 A: 在 Controller 方法中注入 DbContext，並在 Program.cs 加入 `builder.Services.AddDbContext<>()`。
 
@@ -315,8 +362,9 @@ A: 在 Controller 方法中注入 DbContext，並在 Program.cs 加入 `builder.
 - [x] Node.js Express 程式碼產生器
 - [x] Python FastAPI 程式碼產生器（Pydantic v1 / v2）
 - [x] C# ASP.NET Core 程式碼產生器（net8 / net6 / net5 / net31）
+- [x] **Java Spring Boot 程式碼產生器**（Spring Boot 3.2 / 2.7）
 - [x] **版本選擇**（相容舊伺服器部署環境）
-- [x] 97 項自動化測試（含版本差異測試）
+- [x] 132 項自動化測試（含版本差異測試）
 - [ ] 專案匯出為 ZIP 壓縮檔
 - [ ] Swagger / OpenAPI 匯入匯出
 - [ ] 資料庫連線設定（MongoDB / MySQL / PostgreSQL）
