@@ -134,9 +134,151 @@ function buildReturnMap(schema) {
     `${lines}\n            return map;\n        }).get()`;
 }
 
+// ─── DB helpers ───────────────────────────────────────────────────────────────
+
+const JAVA_DB_DEPS = {
+  mysql: `    <dependency>
+      <groupId>com.mysql</groupId>
+      <artifactId>mysql-connector-j</artifactId>
+      <scope>runtime</scope>
+    </dependency>`,
+  postgresql: `    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>`,
+  sqlite: `    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <scope>runtime</scope>
+    </dependency>`,
+  mssql: `    <dependency>
+      <groupId>com.microsoft.sqlserver</groupId>
+      <artifactId>mssql-jdbc</artifactId>
+      <scope>runtime</scope>
+    </dependency>`,
+  oracle: `    <dependency>
+      <groupId>com.oracle.database.jdbc</groupId>
+      <artifactId>ojdbc11</artifactId>
+      <scope>runtime</scope>
+    </dependency>`
+};
+
+const JAVA_SPRING_JDBC_DEP = `    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>`;
+
+function buildJavaDbProps(dbConfig) {
+  const d = dbConfig;
+  let url;
+  switch (d.type) {
+    case 'mysql':
+      url = `jdbc:mysql://${d.host||'localhost'}:${d.port||3306}/${d.database||'mydb'}?useSSL=false&serverTimezone=UTC`;
+      break;
+    case 'postgresql':
+      url = `jdbc:postgresql://${d.host||'localhost'}:${d.port||5432}/${d.database||'mydb'}`;
+      break;
+    case 'sqlite':
+      url = `jdbc:sqlite:${(d.filePath||'./database.db').replace(/\\/g,'/')}`;
+      break;
+    case 'mssql':
+      url = `jdbc:sqlserver://${d.host||'localhost'}:${d.port||1433};databaseName=${d.database||'mydb'};trustServerCertificate=true`;
+      break;
+    case 'oracle':
+      url = `jdbc:oracle:thin:@${d.host||'localhost'}:${d.port||1521}:${d.serviceName||'XEPDB1'}`;
+      break;
+    default:
+      url = '';
+  }
+  const lines = [`spring.datasource.url=${url}`];
+  if (d.type !== 'sqlite') {
+    lines.push(`spring.datasource.username=${d.username||''}`);
+    lines.push(`spring.datasource.password=${d.password||''}`);
+  }
+  return lines.join('\n');
+}
+
+function buildJavaDbController(resource, endpoints, dbConfig, basePackage, cfg) {
+  const tableEndpoint = endpoints.find(ep => ep.tableName);
+  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
+  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
+  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
+  const nonPkCols = columns.filter(c => !c.primaryKey);
+  const ctrl = toPascal(resource);
+  const controllerPkg = `${basePackage}.controller`;
+  const jakartaPrefix = cfg.jakartaImport ? 'jakarta' : 'javax';
+
+  let out = `package ${controllerPkg};\n\n`;
+  out += `import org.springframework.web.bind.annotation.*;\n`;
+  out += `import org.springframework.beans.factory.annotation.Autowired;\n`;
+  out += `import org.springframework.http.ResponseEntity;\n`;
+  out += `import org.springframework.jdbc.core.JdbcTemplate;\n`;
+  out += `import java.util.List;\nimport java.util.Map;\n\n`;
+  out += `@RestController\n@RequestMapping("/${resource}")\npublic class ${ctrl}Controller {\n\n`;
+  out += `    @Autowired\n    private JdbcTemplate jdbc;\n\n`;
+
+  for (const ep of endpoints) {
+    const action = toActionName(ep.method, ep.path);
+    const subPath = toSpringPath(ep.path.replace(new RegExp(`^/?${resource}`), '') || '');
+    const httpAnn = httpAnnotation(ep.method);
+    const routeAttr = subPath ? `("${subPath}")` : '';
+    const isByIdPath = ep.path.includes(':');
+    const method = ep.method.toUpperCase();
+
+    if (ep.description) out += `    // ${ep.description}\n`;
+    out += `    ${httpAnn}${routeAttr}\n`;
+
+    const pkParam = isByIdPath ? `@PathVariable ${toJavaType('int')} ${pkCol}` : '';
+    let bodyParams = '';
+    if (['POST', 'PUT', 'PATCH'].includes(method) && nonPkCols.length > 0) {
+      bodyParams = nonPkCols.map(c => `@RequestParam(required=false) String ${c.name}`).join(', ');
+    }
+    const allParams = [pkParam, bodyParams].filter(Boolean).join(', ');
+
+    out += `    public ResponseEntity<?> ${action}(${allParams}) {\n`;
+
+    if (method === 'GET' && !isByIdPath) {
+      out += `        List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM ${tableName}");\n`;
+      out += `        return ResponseEntity.ok(rows);\n`;
+    } else if (method === 'GET') {
+      out += `        List<Map<String, Object>> rows = jdbc.queryForList("SELECT * FROM ${tableName} WHERE ${pkCol} = ?", ${pkCol});\n`;
+      out += `        if (rows.isEmpty()) return ResponseEntity.notFound().build();\n`;
+      out += `        return ResponseEntity.ok(rows.get(0));\n`;
+    } else if (method === 'POST') {
+      if (nonPkCols.length > 0) {
+        const cols = nonPkCols.map(c=>c.name).join(', ');
+        const ph = nonPkCols.map(()=>'?').join(', ');
+        const vals = nonPkCols.map(c=>c.name).join(', ');
+        out += `        jdbc.update("INSERT INTO ${tableName} (${cols}) VALUES (${ph})", ${vals});\n`;
+        out += `        return ResponseEntity.status(201).body(java.util.Map.of(${nonPkCols.slice(0,10).map(c=>`"${c.name}", ${c.name}`).join(', ')}));\n`;
+      } else {
+        out += `        return ResponseEntity.status(201).body(java.util.Map.of("message", "Created"));\n`;
+      }
+    } else if (method === 'PUT' || method === 'PATCH') {
+      if (nonPkCols.length > 0) {
+        const set = nonPkCols.map(c=>`${c.name} = ?`).join(', ');
+        const vals = nonPkCols.map(c=>c.name).join(', ');
+        out += `        jdbc.update("UPDATE ${tableName} SET ${set} WHERE ${pkCol} = ?", ${vals}, ${pkCol});\n`;
+        out += `        return ResponseEntity.ok(java.util.Map.of("${pkCol}", ${pkCol}));\n`;
+      } else {
+        out += `        return ResponseEntity.ok(java.util.Map.of("message", "Updated"));\n`;
+      }
+    } else if (method === 'DELETE') {
+      out += `        jdbc.update("DELETE FROM ${tableName} WHERE ${pkCol} = ?", ${pkCol});\n`;
+      out += `        return ResponseEntity.ok(java.util.Map.of("message", "Deleted"));\n`;
+    }
+
+    out += `    }\n\n`;
+  }
+
+  out += `}\n`;
+  return out;
+}
+
 // ─── pom.xml ──────────────────────────────────────────────────────────────────
 
-function buildPom(groupId, artifactId, cfg) {
+function buildPom(groupId, artifactId, cfg, dbConfig) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -171,6 +313,7 @@ function buildPom(groupId, artifactId, cfg) {
       <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
       <version>${cfg.springBootVersion.startsWith('3') ? '2.3.0' : '1.7.0'}</version>
     </dependency>
+    ${dbConfig ? JAVA_SPRING_JDBC_DEP + '\n    ' + (JAVA_DB_DEPS[dbConfig.type] || '') : ''}
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
@@ -192,7 +335,7 @@ function buildPom(groupId, artifactId, cfg) {
 
 // ─── Main builder ─────────────────────────────────────────────────────────────
 
-function buildJavaFiles(apis, projectName, version = 'springboot3') {
+function buildJavaFiles(apis, projectName, version = 'springboot3', dbConfig = null) {
   const cfg = JAVA_VERSION_CONFIG[version] || JAVA_VERSION_CONFIG.springboot3;
   const files = {};
   const groups = groupByResource(apis);
@@ -203,7 +346,7 @@ function buildJavaFiles(apis, projectName, version = 'springboot3') {
   const basePath = `src/main/java/${basePackage.replace(/\./g, '/')}`;
 
   // ── pom.xml ──
-  files['pom.xml'] = buildPom(groupId, artifactId, cfg);
+  files['pom.xml'] = buildPom(groupId, artifactId, cfg, dbConfig);
 
   // ── Application.java ──
   files[`${basePath}/Application.java`] = `package ${basePackage};
@@ -220,11 +363,12 @@ public class Application {
 `;
 
   // ── application.properties ──
+  const dbProps = dbConfig ? '\n' + buildJavaDbProps(dbConfig) : '';
   files['src/main/resources/application.properties'] = `# Generated by API Generator — ${cfg.label}
 server.port=8080
 spring.application.name=${projectName}
 springdoc.api-docs.path=/api-docs
-springdoc.swagger-ui.path=/swagger-ui.html
+springdoc.swagger-ui.path=/swagger-ui.html${dbProps}
 `;
 
   // ── README.md ──
@@ -256,6 +400,13 @@ ${apis.map(api => `### ${api.method} \`${api.path}\`\n${api.description ? `> ${a
     const modelPkg = `${basePackage}.model`;
     const controllerPath = `${basePath}/controller`;
     const modelPath = `${basePath}/model`;
+    const hasTableEndpoint = endpoints.some(ep => ep.tableName);
+
+    // Use JdbcTemplate controller if dbConfig + table endpoints
+    if (dbConfig && hasTableEndpoint) {
+      files[`${controllerPath}/${ctrl}Controller.java`] = buildJavaDbController(resource, endpoints, dbConfig, basePackage, cfg);
+      continue;
+    }
 
     // ── Model POJOs ──
     endpoints.forEach(ep => {
@@ -346,4 +497,4 @@ public class ${ctrl}Controller {
   return files;
 }
 
-module.exports = { buildJavaFiles };
+module.exports = { buildJavaFiles, buildJavaDbProps };

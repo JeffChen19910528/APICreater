@@ -241,32 +241,184 @@ ${openApiRef}    <PackageReference Include="Swashbuckle.AspNetCore" Version="${c
 `;
 }
 
+// ─── DB helpers ───────────────────────────────────────────────────────────────
+
+const CSHARP_DB_PACKAGES = {
+  mysql:      'MySqlConnector',
+  postgresql: 'Npgsql',
+  sqlite:     'Microsoft.Data.Sqlite',
+  mssql:      'Microsoft.Data.SqlClient',
+  oracle:     'Oracle.ManagedDataAccess.Core'
+};
+
+const CSHARP_DB_NAMESPACES = {
+  mysql:      'MySqlConnector',
+  postgresql: 'Npgsql',
+  sqlite:     'Microsoft.Data.Sqlite',
+  mssql:      'Microsoft.Data.SqlClient',
+  oracle:     'Oracle.ManagedDataAccess.Client'
+};
+
+const CSHARP_DB_CLASS = {
+  mysql:      'MySqlConnection',
+  postgresql: 'NpgsqlConnection',
+  sqlite:     'SqliteConnection',
+  mssql:      'SqlConnection',
+  oracle:     'OracleConnection'
+};
+
+function buildCsharpConnString(dbConfig) {
+  const d = dbConfig;
+  switch (d.type) {
+    case 'mysql':
+      return `Server=${d.host||'localhost'};Port=${d.port||3306};Database=${d.database||'mydb'};Uid=${d.username||'root'};Pwd=${d.password||''};`;
+    case 'postgresql':
+      return `Host=${d.host||'localhost'};Port=${d.port||5432};Database=${d.database||'mydb'};Username=${d.username||'postgres'};Password=${d.password||''};`;
+    case 'sqlite':
+      return `Data Source=${(d.filePath||'./database.db').replace(/\\/g,'/')};`;
+    case 'mssql':
+      return `Server=${d.host||'localhost'},${d.port||1433};Database=${d.database||'mydb'};User Id=${d.username||'sa'};Password=${d.password||''};TrustServerCertificate=True;`;
+    case 'oracle':
+      return `Data Source=${d.host||'localhost'}:${d.port||1521}/${d.serviceName||'XEPDB1'};User Id=${d.username||'hr'};Password=${d.password||''};`;
+    default:
+      return '';
+  }
+}
+
+function buildCsharpDbController(resource, endpoints, dbConfig, safeProjectName, cfg) {
+  const ctrl = toPascal(resource);
+  const dbClass = CSHARP_DB_CLASS[dbConfig.type] || 'IDbConnection';
+  const ns = CSHARP_DB_NAMESPACES[dbConfig.type] || '';
+
+  const tableEndpoint = endpoints.find(ep => ep.tableName);
+  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
+  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
+  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
+  const pkPascal = toPascal(pkCol);
+  const nonPkCols = columns.filter(c => !c.primaryKey);
+
+  const indent = cfg.minimalHosting ? '    ' : '        ';
+  const inner = cfg.minimalHosting ? '' : '    ';
+
+  let out = `using Dapper;\nusing System.Data;\nusing Microsoft.AspNetCore.Mvc;\n`;
+  if (ns) out += `using ${ns};\n`;
+  out += '\n';
+
+  if (cfg.minimalHosting) {
+    out += `namespace ${safeProjectName}.Controllers;\n\n`;
+    out += `[ApiController]\n[Route("[controller]")]\npublic class ${ctrl}Controller : ControllerBase\n{\n`;
+    out += `${indent}private readonly IDbConnection _db;\n`;
+    out += `${indent}public ${ctrl}Controller(IDbConnection db) => _db = db;\n\n`;
+  } else {
+    out += `namespace ${safeProjectName}.Controllers\n{\n    [ApiController]\n    [Route("[controller]")]\n    public class ${ctrl}Controller : ControllerBase\n    {\n`;
+    out += `${indent}private readonly IDbConnection _db;\n`;
+    out += `${indent}public ${ctrl}Controller(IDbConnection db) => _db = db;\n\n`;
+  }
+
+  for (const ep of endpoints) {
+    const action = toActionName(ep.method, ep.path);
+    const subPath = toAspNetPath(ep.path.replace(new RegExp(`^/?${resource}`), '') || '');
+    const routeAttr = subPath ? `("${subPath}")` : '';
+    const isByIdPath = ep.path.includes(':');
+    const method = ep.method.toUpperCase();
+
+    if (ep.description) out += `${indent}// ${ep.description}\n`;
+    out += `${indent}[${httpAttribute(ep.method)}${routeAttr}]\n`;
+    out += `${indent}public async Task<IActionResult> ${action}(`;
+
+    if (isByIdPath) out += `[FromRoute] int ${pkCol}`;
+    if (['POST','PUT','PATCH'].includes(method)) {
+      if (isByIdPath) out += ', ';
+      if (nonPkCols.length > 0) {
+        out += nonPkCols.map(c => `string ${c.name} = ""`).join(', ');
+      }
+    }
+    out += `)\n${indent}{\n`;
+
+    if (method === 'GET' && !isByIdPath) {
+      out += `${indent}    var items = await _db.QueryAsync("SELECT * FROM ${tableName}");\n`;
+      out += `${indent}    return Ok(items);\n`;
+    } else if (method === 'GET') {
+      out += `${indent}    var item = await _db.QueryFirstOrDefaultAsync("SELECT * FROM ${tableName} WHERE ${pkCol} = @${pkPascal}", new { ${pkPascal} = ${pkCol} });\n`;
+      out += `${indent}    if (item == null) return NotFound();\n`;
+      out += `${indent}    return Ok(item);\n`;
+    } else if (method === 'POST') {
+      if (nonPkCols.length > 0) {
+        const cols = nonPkCols.map(c => c.name).join(', ');
+        const vals = nonPkCols.map(c => `@${toPascal(c.name)}`).join(', ');
+        const anon = nonPkCols.map(c => `${toPascal(c.name)} = ${c.name}`).join(', ');
+        out += `${indent}    await _db.ExecuteAsync("INSERT INTO ${tableName} (${cols}) VALUES (${vals})", new { ${anon} });\n`;
+        out += `${indent}    return StatusCode(201, new { ${nonPkCols.map(c=>`${c.name}`).join(', ')} });\n`;
+      } else {
+        out += `${indent}    return StatusCode(201, new { message = "Created" });\n`;
+      }
+    } else if (method === 'PUT' || method === 'PATCH') {
+      if (nonPkCols.length > 0) {
+        const set = nonPkCols.map(c => `${c.name} = @${toPascal(c.name)}`).join(', ');
+        const anon = [...nonPkCols.map(c => `${toPascal(c.name)} = ${c.name}`), `${pkPascal} = ${pkCol}`].join(', ');
+        out += `${indent}    await _db.ExecuteAsync("UPDATE ${tableName} SET ${set} WHERE ${pkCol} = @${pkPascal}", new { ${anon} });\n`;
+        out += `${indent}    return Ok(new { ${pkCol}, ${nonPkCols.map(c=>c.name).join(', ')} });\n`;
+      } else {
+        out += `${indent}    return Ok(new { message = "Updated" });\n`;
+      }
+    } else if (method === 'DELETE') {
+      out += `${indent}    await _db.ExecuteAsync("DELETE FROM ${tableName} WHERE ${pkCol} = @${pkPascal}", new { ${pkPascal} = ${pkCol} });\n`;
+      out += `${indent}    return Ok(new { message = "Deleted" });\n`;
+    }
+
+    out += `${indent}}\n\n`;
+  }
+
+  out += cfg.minimalHosting ? '}\n' : '    }\n}\n';
+  return out;
+}
+
 // ─── Main builder ─────────────────────────────────────────────────────────────
 
-function buildCsharpFiles(apis, projectName, version = 'net8') {
+function buildCsharpFiles(apis, projectName, version = 'net8', dbConfig = null) {
   const cfg = CSHARP_VERSION_CONFIG[version] || CSHARP_VERSION_CONFIG.net8;
   const files = {};
   const groups = groupByResource(apis);
   const safeProjectName = toPascal(projectName.replace(/[^a-zA-Z0-9_\-]/g, '_'));
 
   // ── Program.cs ──
+  let programCs = cfg.minimalHosting ? buildProgramMinimal(safeProjectName, cfg) : buildProgramLegacy(safeProjectName);
+  if (dbConfig && cfg.minimalHosting) {
+    const dbClass = CSHARP_DB_CLASS[dbConfig.type] || 'IDbConnection';
+    const ns = CSHARP_DB_NAMESPACES[dbConfig.type] || '';
+    const diLine = `\n// Database connection\nbuilder.Services.AddScoped<System.Data.IDbConnection>(_ =>\n    new ${dbClass}(builder.Configuration.GetConnectionString("DefaultConnection")));\n`;
+    const nsUsing = ns ? `using ${ns};\n` : '';
+    programCs = nsUsing + 'using Dapper;\n' + programCs.replace(
+      'var app = builder.Build();',
+      diLine + '\nvar app = builder.Build();'
+    );
+  }
   if (cfg.minimalHosting) {
-    files['Program.cs'] = buildProgramMinimal(safeProjectName, cfg);
+    files['Program.cs'] = programCs;
   } else {
     files['Program.cs'] = buildProgramLegacy(safeProjectName);
     files['Startup.cs'] = buildStartupLegacy(safeProjectName);
   }
 
   // ── .csproj ──
-  files[`${safeProjectName}.csproj`] = buildCsproj(safeProjectName, cfg);
+  const dbPackageName = dbConfig ? CSHARP_DB_PACKAGES[dbConfig.type] : null;
+  const dbPackageRef = dbPackageName
+    ? `    <PackageReference Include="${dbPackageName}" Version="*" />\n    <PackageReference Include="Dapper" Version="2.1.35" />\n`
+    : '';
+  files[`${safeProjectName}.csproj`] = buildCsproj(safeProjectName, cfg).replace(
+    '  </ItemGroup>',
+    dbPackageRef + '  </ItemGroup>'
+  );
 
   // ── appsettings.json ──
-  files['appsettings.json'] = JSON.stringify({
-    Logging: {
-      LogLevel: { Default: 'Information', 'Microsoft.AspNetCore': 'Warning' }
-    },
+  const appSettings = {
+    Logging: { LogLevel: { Default: 'Information', 'Microsoft.AspNetCore': 'Warning' } },
     AllowedHosts: '*'
-  }, null, 2);
+  };
+  if (dbConfig) {
+    appSettings.ConnectionStrings = { DefaultConnection: buildCsharpConnString(dbConfig) };
+  }
+  files['appsettings.json'] = JSON.stringify(appSettings, null, 2);
 
   // ── appsettings.Development.json ──
   files['appsettings.Development.json'] = JSON.stringify({
@@ -302,6 +454,16 @@ ${apis.map(api => `### ${api.method} \`${api.path}\`\n${api.description ? `> ${a
 
   for (const [resource, endpoints] of Object.entries(groups)) {
     const ctrl = toPascal(resource);
+    const hasTableEndpoint = endpoints.some(ep => ep.tableName);
+
+    // Use DB controller if dbConfig + table endpoints
+    if (dbConfig && hasTableEndpoint) {
+      files[`Controllers/${ctrl}Controller.cs`] = buildCsharpDbController(resource, endpoints, dbConfig, safeProjectName, cfg);
+      files[`Models/${ctrl}Models.cs`] = cfg.minimalHosting
+        ? `namespace ${safeProjectName}.Models;\n// Models for ${resource}\n`
+        : `namespace ${safeProjectName}.Models\n{\n    // Models for ${resource}\n}\n`;
+      continue;
+    }
 
     // ── Models ──
     let modelFile = cfg.minimalHosting
@@ -370,4 +532,4 @@ ${apis.map(api => `### ${api.method} \`${api.path}\`\n${api.description ? `> ${a
   return files;
 }
 
-module.exports = { buildCsharpFiles };
+module.exports = { buildCsharpFiles, buildCsharpConnString };

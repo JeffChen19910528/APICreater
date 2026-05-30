@@ -8,7 +8,8 @@ const { buildJavaFiles }   = require('./javaBuilder');
 // ─── EJS Templates (Node.js / Express) ───────────────────────────────────────
 
 const TEMPLATES = {
-  appJs: `const express = require('express');
+  appJs: `<% if (withDb) { %>require('dotenv').config();
+<% } %>const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
 
@@ -89,6 +90,16 @@ const NODE_VERSION_CONFIG = {
   }
 };
 
+// ─── DB driver dependencies ───────────────────────────────────────────────────
+
+const DB_DEPENDENCIES = {
+  mysql:      { mysql2: '^3.11.0',         dotenv: '^16.4.5' },
+  postgresql: { pg: '^8.13.0',             dotenv: '^16.4.5' },
+  sqlite:     { 'better-sqlite3': '^11.5.0', dotenv: '^16.4.5' },
+  mssql:      { mssql: '^11.0.1',          dotenv: '^16.4.5' },
+  oracle:     { oracledb: '^6.7.0',        dotenv: '^16.4.5' }
+};
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function buildSampleResponse(schema) {
@@ -130,9 +141,357 @@ function toHandlerName(method, path) {
   return method.toLowerCase() + suffix;
 }
 
+// ─── DB: db/index.js generator ───────────────────────────────────────────────
+
+function generateDbIndex(dbConfig) {
+  const d = dbConfig;
+  switch (d.type) {
+    case 'mysql':
+      return `const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+  host:     process.env.DB_HOST     || '${d.host || 'localhost'}',
+  port:     parseInt(process.env.DB_PORT) || ${d.port || 3306},
+  user:     process.env.DB_USER     || '${d.username || 'root'}',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME     || '${d.database || 'mydb'}',
+  waitForConnections: true,
+  connectionLimit: 10
+});
+
+module.exports = pool;
+`;
+
+    case 'postgresql':
+      return `const { Pool } = require('pg');
+
+const pool = new Pool({
+  host:     process.env.DB_HOST     || '${d.host || 'localhost'}',
+  port:     parseInt(process.env.DB_PORT) || ${d.port || 5432},
+  user:     process.env.DB_USER     || '${d.username || 'postgres'}',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME     || '${d.database || 'mydb'}'
+});
+
+module.exports = pool;
+`;
+
+    case 'sqlite':
+      return `const Database = require('better-sqlite3');
+const path = require('path');
+
+const db = new Database(path.resolve(process.env.DB_PATH || '${(d.filePath || './database.db').replace(/\\/g, '/')}'));
+db.pragma('journal_mode = WAL');
+
+module.exports = db;
+`;
+
+    case 'mssql':
+      return `const sql = require('mssql');
+
+const config = {
+  server:   process.env.DB_HOST     || '${d.host || 'localhost'}',
+  port:     parseInt(process.env.DB_PORT) || ${d.port || 1433},
+  user:     process.env.DB_USER     || '${d.username || 'sa'}',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME     || '${d.database || 'mydb'}',
+  options: {
+    encrypt: false,
+    trustServerCertificate: true
+  }
+};
+
+const poolPromise = sql.connect(config);
+
+module.exports = { sql, poolPromise };
+`;
+
+    case 'oracle':
+      return `const oracledb = require('oracledb');
+
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+
+const dbConfig = {
+  user:          process.env.DB_USER          || '${d.username || 'hr'}',
+  password:      process.env.DB_PASSWORD      || '',
+  connectString: process.env.DB_CONNECT_STRING || '${d.host || 'localhost'}:${d.port || 1521}/${d.serviceName || 'XEPDB1'}'
+};
+
+async function getConnection() {
+  return oracledb.getConnection(dbConfig);
+}
+
+module.exports = { getConnection, oracledb };
+`;
+
+    default:
+      return `// Unknown database type: ${d.type}\n`;
+  }
+}
+
+// ─── DB: .env generator ──────────────────────────────────────────────────────
+
+function generateEnvFile(dbConfig) {
+  const d = dbConfig;
+  const lines = ['# Database Configuration (do not commit this file)'];
+
+  if (d.type === 'sqlite') {
+    lines.push(`DB_PATH=${d.filePath || './database.db'}`);
+  } else if (d.type === 'oracle') {
+    lines.push(`DB_USER=${d.username || ''}`);
+    lines.push(`DB_PASSWORD=${d.password || ''}`);
+    lines.push(`DB_CONNECT_STRING=${d.host || 'localhost'}:${d.port || 1521}/${d.serviceName || 'XEPDB1'}`);
+  } else {
+    lines.push(`DB_HOST=${d.host || 'localhost'}`);
+    lines.push(`DB_PORT=${d.port || ''}`);
+    lines.push(`DB_NAME=${d.database || ''}`);
+    lines.push(`DB_USER=${d.username || ''}`);
+    lines.push(`DB_PASSWORD=${d.password || ''}`);
+  }
+
+  lines.push('', '# Server Configuration', 'PORT=3000');
+  return lines.join('\n');
+}
+
+// ─── DB: Controller generator ────────────────────────────────────────────────
+
+function generateDbController(resource, endpoints, dbConfig) {
+  const dbType = dbConfig.type;
+  const tableEndpoint = endpoints.find(ep => ep.tableName);
+  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
+  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
+  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
+  const nonPkCols = columns.filter(c => !c.primaryKey);
+  const nonPkNames = nonPkCols.map(c => c.name);
+
+  let out = '';
+
+  if (dbType === 'mysql' || dbType === 'postgresql') {
+    const isMySQL = dbType === 'mysql';
+    out += `const db = require('../db');\n\n`;
+
+    for (const ep of endpoints) {
+      const isByIdPath = ep.fullPath.includes(':');
+      const method = ep.method.toUpperCase();
+      out += `// ${method} ${ep.fullPath}\nexports.${ep.handlerName} = async (req, res) => {\n  try {\n`;
+
+      if (method === 'GET' && !isByIdPath) {
+        if (isMySQL) {
+          out += `    const [rows] = await db.query('SELECT * FROM \`${tableName}\`');\n`;
+        } else {
+          out += `    const { rows } = await db.query('SELECT * FROM "${tableName}"');\n`;
+        }
+        out += `    res.json(rows);\n`;
+      } else if (method === 'GET') {
+        if (isMySQL) {
+          out += `    const [rows] = await db.query('SELECT * FROM \`${tableName}\` WHERE ${pkCol} = ?', [req.params.${pkCol}]);\n`;
+          out += `    if (!rows.length) return res.status(404).json({ message: 'Not found' });\n`;
+          out += `    res.json(rows[0]);\n`;
+        } else {
+          out += `    const { rows } = await db.query('SELECT * FROM "${tableName}" WHERE ${pkCol} = $1', [req.params.${pkCol}]);\n`;
+          out += `    if (!rows.length) return res.status(404).json({ message: 'Not found' });\n`;
+          out += `    res.json(rows[0]);\n`;
+        }
+      } else if (method === 'POST') {
+        if (nonPkNames.length > 0) {
+          if (isMySQL) {
+            const cols = nonPkNames.map(c => `\`${c}\``).join(', ');
+            const ph = nonPkNames.map(() => '?').join(', ');
+            const vals = nonPkNames.join(', ');
+            out += `    const { ${vals} } = req.body;\n`;
+            out += `    const [result] = await db.query('INSERT INTO \`${tableName}\` (${cols}) VALUES (${ph})', [${vals}]);\n`;
+            out += `    res.status(201).json({ ${pkCol}: result.insertId, ${vals} });\n`;
+          } else {
+            const cols = nonPkNames.map(c => `"${c}"`).join(', ');
+            const ph = nonPkNames.map((_, i) => `$${i + 1}`).join(', ');
+            const vals = nonPkNames.join(', ');
+            out += `    const { ${vals} } = req.body;\n`;
+            out += `    const { rows } = await db.query('INSERT INTO "${tableName}" (${cols}) VALUES (${ph}) RETURNING *', [${vals}]);\n`;
+            out += `    res.status(201).json(rows[0]);\n`;
+          }
+        } else {
+          out += `    res.status(201).json({ message: 'Created' });\n`;
+        }
+      } else if (method === 'PUT' || method === 'PATCH') {
+        if (nonPkNames.length > 0) {
+          const vals = nonPkNames.join(', ');
+          if (isMySQL) {
+            const set = nonPkNames.map(c => `\`${c}\` = ?`).join(', ');
+            out += `    const { ${vals} } = req.body;\n`;
+            out += `    await db.query('UPDATE \`${tableName}\` SET ${set} WHERE ${pkCol} = ?', [${vals}, req.params.${pkCol}]);\n`;
+            out += `    res.json({ ${pkCol}: req.params.${pkCol}, ${vals} });\n`;
+          } else {
+            const set = nonPkNames.map((c, i) => `"${c}" = $${i + 1}`).join(', ');
+            out += `    const { ${vals} } = req.body;\n`;
+            out += `    await db.query('UPDATE "${tableName}" SET ${set} WHERE ${pkCol} = $${nonPkNames.length + 1}', [${vals}, req.params.${pkCol}]);\n`;
+            out += `    res.json({ ${pkCol}: req.params.${pkCol}, ${vals} });\n`;
+          }
+        } else {
+          out += `    res.json({ message: 'Updated' });\n`;
+        }
+      } else if (method === 'DELETE') {
+        if (isMySQL) {
+          out += `    await db.query('DELETE FROM \`${tableName}\` WHERE ${pkCol} = ?', [req.params.${pkCol}]);\n`;
+        } else {
+          out += `    await db.query('DELETE FROM "${tableName}" WHERE ${pkCol} = $1', [req.params.${pkCol}]);\n`;
+        }
+        out += `    res.json({ message: 'Deleted' });\n`;
+      }
+
+      out += `  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n};\n\n`;
+    }
+
+  } else if (dbType === 'sqlite') {
+    out += `const db = require('../db');\n\n`;
+
+    for (const ep of endpoints) {
+      const isByIdPath = ep.fullPath.includes(':');
+      const method = ep.method.toUpperCase();
+      out += `// ${method} ${ep.fullPath}\nexports.${ep.handlerName} = (req, res) => {\n  try {\n`;
+
+      if (method === 'GET' && !isByIdPath) {
+        out += `    const rows = db.prepare('SELECT * FROM ${tableName}').all();\n`;
+        out += `    res.json(rows);\n`;
+      } else if (method === 'GET') {
+        out += `    const row = db.prepare('SELECT * FROM ${tableName} WHERE ${pkCol} = ?').get(req.params.${pkCol});\n`;
+        out += `    if (!row) return res.status(404).json({ message: 'Not found' });\n`;
+        out += `    res.json(row);\n`;
+      } else if (method === 'POST') {
+        if (nonPkNames.length > 0) {
+          const cols = nonPkNames.join(', ');
+          const ph = nonPkNames.map(() => '?').join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    const result = db.prepare('INSERT INTO ${tableName} (${cols}) VALUES (${ph})').run(${vals});\n`;
+          out += `    res.status(201).json({ ${pkCol}: result.lastInsertRowid, ${vals} });\n`;
+        } else {
+          out += `    res.status(201).json({ message: 'Created' });\n`;
+        }
+      } else if (method === 'PUT' || method === 'PATCH') {
+        if (nonPkNames.length > 0) {
+          const set = nonPkNames.map(c => `${c} = ?`).join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    db.prepare('UPDATE ${tableName} SET ${set} WHERE ${pkCol} = ?').run(${vals}, req.params.${pkCol});\n`;
+          out += `    res.json({ ${pkCol}: req.params.${pkCol}, ${vals} });\n`;
+        } else {
+          out += `    res.json({ message: 'Updated' });\n`;
+        }
+      } else if (method === 'DELETE') {
+        out += `    db.prepare('DELETE FROM ${tableName} WHERE ${pkCol} = ?').run(req.params.${pkCol});\n`;
+        out += `    res.json({ message: 'Deleted' });\n`;
+      }
+
+      out += `  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n};\n\n`;
+    }
+
+  } else if (dbType === 'mssql') {
+    out += `const { sql, poolPromise } = require('../db');\n\n`;
+
+    for (const ep of endpoints) {
+      const isByIdPath = ep.fullPath.includes(':');
+      const method = ep.method.toUpperCase();
+      out += `// ${method} ${ep.fullPath}\nexports.${ep.handlerName} = async (req, res) => {\n  try {\n`;
+      out += `    const pool = await poolPromise;\n`;
+
+      if (method === 'GET' && !isByIdPath) {
+        out += `    const result = await pool.request().query('SELECT * FROM [${tableName}]');\n`;
+        out += `    res.json(result.recordset);\n`;
+      } else if (method === 'GET') {
+        out += `    const result = await pool.request()\n`;
+        out += `      .input('${pkCol}', sql.Int, req.params.${pkCol})\n`;
+        out += `      .query('SELECT * FROM [${tableName}] WHERE ${pkCol} = @${pkCol}');\n`;
+        out += `    if (!result.recordset.length) return res.status(404).json({ message: 'Not found' });\n`;
+        out += `    res.json(result.recordset[0]);\n`;
+      } else if (method === 'POST') {
+        if (nonPkNames.length > 0) {
+          const cols = nonPkNames.map(c => `[${c}]`).join(', ');
+          const ph = nonPkNames.map(c => `@${c}`).join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    const req2 = pool.request();\n`;
+          for (const c of nonPkNames) out += `    req2.input('${c}', ${c});\n`;
+          out += `    const result = await req2.query('INSERT INTO [${tableName}] (${cols}) OUTPUT INSERTED.* VALUES (${ph})');\n`;
+          out += `    res.status(201).json(result.recordset[0]);\n`;
+        } else {
+          out += `    res.status(201).json({ message: 'Created' });\n`;
+        }
+      } else if (method === 'PUT' || method === 'PATCH') {
+        if (nonPkNames.length > 0) {
+          const set = nonPkNames.map(c => `[${c}] = @${c}`).join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    const req2 = pool.request();\n`;
+          for (const c of nonPkNames) out += `    req2.input('${c}', ${c});\n`;
+          out += `    req2.input('${pkCol}', sql.Int, req.params.${pkCol});\n`;
+          out += `    await req2.query('UPDATE [${tableName}] SET ${set} WHERE ${pkCol} = @${pkCol}');\n`;
+          out += `    res.json({ ${pkCol}: req.params.${pkCol}, ${vals} });\n`;
+        } else {
+          out += `    res.json({ message: 'Updated' });\n`;
+        }
+      } else if (method === 'DELETE') {
+        out += `    await pool.request()\n`;
+        out += `      .input('${pkCol}', sql.Int, req.params.${pkCol})\n`;
+        out += `      .query('DELETE FROM [${tableName}] WHERE ${pkCol} = @${pkCol}');\n`;
+        out += `    res.json({ message: 'Deleted' });\n`;
+      }
+
+      out += `  } catch (err) {\n    res.status(500).json({ error: err.message });\n  }\n};\n\n`;
+    }
+
+  } else if (dbType === 'oracle') {
+    out += `const { getConnection, oracledb } = require('../db');\n\n`;
+    const TBL = tableName.toUpperCase();
+    const PK = pkCol.toUpperCase();
+
+    for (const ep of endpoints) {
+      const isByIdPath = ep.fullPath.includes(':');
+      const method = ep.method.toUpperCase();
+      out += `// ${method} ${ep.fullPath}\nexports.${ep.handlerName} = async (req, res) => {\n  let conn;\n  try {\n    conn = await getConnection();\n`;
+
+      if (method === 'GET' && !isByIdPath) {
+        out += `    const result = await conn.execute('SELECT * FROM ${TBL}', [], { outFormat: oracledb.OUT_FORMAT_OBJECT });\n`;
+        out += `    res.json(result.rows);\n`;
+      } else if (method === 'GET') {
+        out += `    const result = await conn.execute('SELECT * FROM ${TBL} WHERE ${PK} = :1', [req.params.${pkCol}], { outFormat: oracledb.OUT_FORMAT_OBJECT });\n`;
+        out += `    if (!result.rows.length) return res.status(404).json({ message: 'Not found' });\n`;
+        out += `    res.json(result.rows[0]);\n`;
+      } else if (method === 'POST') {
+        if (nonPkNames.length > 0) {
+          const cols = nonPkNames.map(c => c.toUpperCase()).join(', ');
+          const ph = nonPkNames.map((_, i) => `:${i + 1}`).join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    await conn.execute('INSERT INTO ${TBL} (${cols}) VALUES (${ph})', [${vals}], { autoCommit: true });\n`;
+          out += `    res.status(201).json({ message: 'Created', ${vals} });\n`;
+        } else {
+          out += `    res.status(201).json({ message: 'Created' });\n`;
+        }
+      } else if (method === 'PUT' || method === 'PATCH') {
+        if (nonPkNames.length > 0) {
+          const set = nonPkNames.map((c, i) => `${c.toUpperCase()} = :${i + 1}`).join(', ');
+          const vals = nonPkNames.join(', ');
+          out += `    const { ${vals} } = req.body;\n`;
+          out += `    await conn.execute('UPDATE ${TBL} SET ${set} WHERE ${PK} = :${nonPkNames.length + 1}', [${vals}, req.params.${pkCol}], { autoCommit: true });\n`;
+          out += `    res.json({ ${pkCol}: req.params.${pkCol}, ${vals} });\n`;
+        } else {
+          out += `    res.json({ message: 'Updated' });\n`;
+        }
+      } else if (method === 'DELETE') {
+        out += `    await conn.execute('DELETE FROM ${TBL} WHERE ${PK} = :1', [req.params.${pkCol}], { autoCommit: true });\n`;
+        out += `    res.json({ message: 'Deleted' });\n`;
+      }
+
+      out += `  } catch (err) {\n    res.status(500).json({ error: err.message });\n  } finally {\n    if (conn) await conn.close();\n  }\n};\n\n`;
+    }
+  }
+
+  return out;
+}
+
 // ─── Node.js File Builder ─────────────────────────────────────────────────────
 
-function buildNodeFiles(apis, projectName, version = 'express4') {
+function buildNodeFiles(apis, projectName, version = 'express4', dbConfig = null) {
   const files = {};
   const groups = groupByResource(apis);
   const cfg = NODE_VERSION_CONFIG[version] || NODE_VERSION_CONFIG.express4;
@@ -141,9 +500,21 @@ function buildNodeFiles(apis, projectName, version = 'express4') {
     `app.use('/${r}', require('./routes/${r}Route'));`
   ).join('\n');
 
-  files['app.js'] = ejs.render(TEMPLATES.appJs, { projectName, routes: routeImports });
+  files['app.js'] = ejs.render(TEMPLATES.appJs, {
+    projectName,
+    routes: routeImports,
+    withDb: !!dbConfig
+  });
+
+  // DB files
+  if (dbConfig) {
+    files['db/index.js'] = generateDbIndex(dbConfig);
+    files['.env'] = generateEnvFile(dbConfig);
+    files['.gitignore'] = '.env\nnode_modules/\n';
+  }
 
   // Version-specific package.json
+  const dbDeps = dbConfig ? (DB_DEPENDENCIES[dbConfig.type] || {}) : {};
   files['package.json'] = JSON.stringify({
     name: projectName,
     version: '1.0.0',
@@ -151,7 +522,10 @@ function buildNodeFiles(apis, projectName, version = 'express4') {
     main: 'app.js',
     engines: { node: cfg.nodeEngine },
     scripts: { start: 'node app.js', dev: 'nodemon app.js' },
-    dependencies: { express: cfg.expressVersion },
+    dependencies: {
+      express: cfg.expressVersion,
+      ...dbDeps
+    },
     devDependencies: { nodemon: '^3.0.2' }
   }, null, 2);
 
@@ -173,10 +547,15 @@ function buildNodeFiles(apis, projectName, version = 'express4') {
       endpoints: enriched
     });
 
-    files[`controllers/${resource}Controller.js`] = ejs.render(TEMPLATES.controllerFile, {
-      endpoints: enriched,
-      buildSampleResponse
-    });
+    const hasTableEndpoint = enriched.some(ep => ep.tableName);
+    if (dbConfig && hasTableEndpoint) {
+      files[`controllers/${resource}Controller.js`] = generateDbController(resource, enriched, dbConfig);
+    } else {
+      files[`controllers/${resource}Controller.js`] = ejs.render(TEMPLATES.controllerFile, {
+        endpoints: enriched,
+        buildSampleResponse
+      });
+    }
 
     const modelContent = endpoints.map(ep =>
       `// ${ep.method} ${ep.path}\n// Request: ${JSON.stringify(ep.requestSchema, null, 2)}\n// Response: ${JSON.stringify(ep.responseSchema, null, 2)}`
@@ -189,19 +568,19 @@ function buildNodeFiles(apis, projectName, version = 'express4') {
 
 // ─── Dispatch by language + version ───────────────────────────────────────────
 
-function buildFiles(apis, projectName, language, version) {
+function buildFiles(apis, projectName, language, version, dbConfig) {
   switch (language) {
-    case 'python': return buildPythonFiles(apis, projectName, version);
-    case 'csharp': return buildCsharpFiles(apis, projectName, version);
-    case 'java':   return buildJavaFiles(apis, projectName, version);
-    default:       return buildNodeFiles(apis, projectName, version);
+    case 'python': return buildPythonFiles(apis, projectName, version, dbConfig);
+    case 'csharp': return buildCsharpFiles(apis, projectName, version, dbConfig);
+    case 'java':   return buildJavaFiles(apis, projectName, version, dbConfig);
+    default:       return buildNodeFiles(apis, projectName, version, dbConfig);
   }
 }
 
 // ─── Write to disk ────────────────────────────────────────────────────────────
 
-async function generateProject({ apis, projectName, language, version, outputDir }) {
-  const files = buildFiles(apis, projectName, language, version);
+async function generateProject({ apis, projectName, language, version, outputDir, dbConfig }) {
+  const files = buildFiles(apis, projectName, language, version, dbConfig);
   for (const [filePath, content] of Object.entries(files)) {
     const fullPath = path.join(outputDir, filePath);
     fs.mkdirSync(path.dirname(fullPath), { recursive: true });
@@ -212,8 +591,8 @@ async function generateProject({ apis, projectName, language, version, outputDir
 
 // ─── Preview (no disk write) ──────────────────────────────────────────────────
 
-async function generatePreview({ apis, projectName, language, version }) {
-  return buildFiles(apis, projectName, language, version);
+async function generatePreview({ apis, projectName, language, version, dbConfig }) {
+  return buildFiles(apis, projectName, language, version, dbConfig);
 }
 
-module.exports = { generateProject, generatePreview };
+module.exports = { generateProject, generatePreview, generateDbIndex, generateEnvFile, generateDbController };

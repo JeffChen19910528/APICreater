@@ -3,13 +3,15 @@ import Sidebar from './components/Sidebar';
 import ApiDesigner from './pages/ApiDesigner';
 import CodePreview from './pages/CodePreview';
 import ExportPage from './pages/ExportPage';
+import DatabaseImport from './pages/DatabaseImport';
 import { getDefaultVersion } from './utils/versions';
 import './App.css';
 
 const PAGES = {
   designer: ApiDesigner,
-  preview: CodePreview,
-  export: ExportPage
+  preview:  CodePreview,
+  export:   ExportPage,
+  database: DatabaseImport
 };
 
 export default function App() {
@@ -18,6 +20,7 @@ export default function App() {
   const [projectName, setProjectName] = useState('my-api-project');
   const [language, setLanguage] = useState('nodejs');
   const [version, setVersion] = useState(getDefaultVersion('nodejs'));
+  const [dbConfig, setDbConfig] = useState(null);
 
   const handleLanguageChange = (newLang) => {
     setLanguage(newLang);
@@ -38,6 +41,7 @@ export default function App() {
         version={version}
         onVersionChange={setVersion}
         apiCount={apis.length}
+        dbConfig={dbConfig}
       />
       <main className="main-content">
         <PageComponent
@@ -46,6 +50,8 @@ export default function App() {
           projectName={projectName}
           language={language}
           version={version}
+          dbConfig={dbConfig}
+          setDbConfig={setDbConfig}
           onNavigate={setCurrentPage}
         />
       </main>

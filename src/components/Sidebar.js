@@ -4,6 +4,7 @@ import './Sidebar.css';
 
 const NAV_ITEMS = [
   { id: 'designer', label: 'API 設計器', icon: '⚙' },
+  { id: 'database', label: '資料庫匯入', icon: '🗄' },
   { id: 'preview',  label: '程式碼預覽', icon: '📄' },
   { id: 'export',   label: '匯出專案',   icon: '📦' }
 ];
@@ -20,7 +21,7 @@ export default function Sidebar({
   projectName, onProjectNameChange,
   language, onLanguageChange,
   version, onVersionChange,
-  apiCount
+  apiCount, dbConfig
 }) {
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(projectName);
@@ -122,6 +123,9 @@ export default function Sidebar({
             <span className="nav-label">{item.label}</span>
             {item.id === 'designer' && apiCount > 0 && (
               <span className="nav-badge">{apiCount}</span>
+            )}
+            {item.id === 'database' && dbConfig && (
+              <span className="nav-badge nav-badge-db">●</span>
             )}
           </button>
         ))}

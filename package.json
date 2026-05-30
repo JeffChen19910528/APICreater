@@ -11,6 +11,7 @@
     "test:python": "node --test tests/python.test.js",
     "test:csharp": "node --test tests/csharp.test.js",
     "test:integration": "node --test tests/integration.test.js",
+    "test:database": "node --test tests/database.test.js",
     "start": "electron .",
     "dev": "concurrently \"cross-env BROWSER=none react-scripts start\" \"wait-on http://localhost:3000 && electron .\"",
     "build:react": "react-scripts build",
@@ -23,9 +24,16 @@
   "dependencies": {
     "archiver": "^7.0.1",
     "ejs": "^3.1.10",
+    "mssql": "^11.0.1",
+    "mysql2": "^3.11.0",
+    "pg": "^8.13.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-scripts": "5.0.1"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^11.5.0",
+    "oracledb": "^6.7.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

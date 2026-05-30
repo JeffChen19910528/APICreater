@@ -27,7 +27,8 @@ const TEST_FILES = [
   { name: 'C# Generator',       file: 'tests/csharp.test.js' },
   { name: 'Java Generator',     file: 'tests/java.test.js' },
   { name: 'Integration (磁碟)', file: 'tests/integration.test.js' },
-  { name: '版本差異測試',        file: 'tests/version.test.js' }
+  { name: '版本差異測試',        file: 'tests/version.test.js' },
+  { name: '資料庫匯入功能',      file: 'tests/database.test.js' }
 ];
 
 console.log('');
