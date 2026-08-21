@@ -1,5 +1,7 @@
 // ─── C# ASP.NET Core Code Generator ──────────────────────────────────────────
 
+const { groupByResource, getTableMeta } = require('./shared');
+
 // ─── Version Configurations ───────────────────────────────────────────────────
 
 const CSHARP_VERSION_CONFIG = {
@@ -80,17 +82,6 @@ function httpAttribute(method) {
 
 function toAspNetPath(path) {
   return path.replace(/:(\w+)/g, '{$1}');
-}
-
-function groupByResource(apis) {
-  const groups = {};
-  for (const api of apis) {
-    const parts = api.path.replace(/^\//, '').split('/');
-    const resource = parts[0] || 'Index';
-    if (!groups[resource]) groups[resource] = [];
-    groups[resource].push(api);
-  }
-  return groups;
 }
 
 // ─── Build Model Properties ───────────────────────────────────────────────────
@@ -290,12 +281,8 @@ function buildCsharpDbController(resource, endpoints, dbConfig, safeProjectName,
   const dbClass = CSHARP_DB_CLASS[dbConfig.type] || 'IDbConnection';
   const ns = CSHARP_DB_NAMESPACES[dbConfig.type] || '';
 
-  const tableEndpoint = endpoints.find(ep => ep.tableName);
-  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
-  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
-  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
+  const { tableName, pkCol, nonPkCols } = getTableMeta(endpoints, resource);
   const pkPascal = toPascal(pkCol);
-  const nonPkCols = columns.filter(c => !c.primaryKey);
 
   const indent = cfg.minimalHosting ? '    ' : '        ';
   const inner = cfg.minimalHosting ? '' : '    ';

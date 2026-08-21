@@ -12,15 +12,15 @@ const {
   mapSqliteType,
   mapMssqlType,
   mapOracleType
-} = require(path.join(__dirname, '../generator/dbSchemaReader'));
+} = require(path.join(__dirname, '../src/generator/dbSchemaReader'));
 
 const {
   generateDbIndex,
   generateEnvFile,
   generateDbController
-} = require(path.join(__dirname, '../generator/codeBuilder'));
+} = require(path.join(__dirname, '../src/generator/codeBuilder'));
 
-const { generatePreview } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generatePreview } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 
 // ─── DB-imported API fixture ──────────────────────────────────────────────────
 

@@ -1,5 +1,7 @@
 // ─── Java Spring Boot Code Generator ─────────────────────────────────────────
 
+const { groupByResource, getTableMeta } = require('./shared');
+
 // ─── Version Configurations ───────────────────────────────────────────────────
 
 const JAVA_VERSION_CONFIG = {
@@ -79,17 +81,6 @@ function httpAnnotation(method) {
     PATCH:  '@PatchMapping',
     DELETE: '@DeleteMapping'
   }[method] || '@GetMapping';
-}
-
-function groupByResource(apis) {
-  const groups = {};
-  for (const api of apis) {
-    const parts = api.path.replace(/^\//, '').split('/');
-    const resource = parts[0] || 'index';
-    if (!groups[resource]) groups[resource] = [];
-    groups[resource].push(api);
-  }
-  return groups;
 }
 
 // ─── Build POJO fields ────────────────────────────────────────────────────────
@@ -200,11 +191,7 @@ function buildJavaDbProps(dbConfig) {
 }
 
 function buildJavaDbController(resource, endpoints, dbConfig, basePackage, cfg) {
-  const tableEndpoint = endpoints.find(ep => ep.tableName);
-  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
-  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
-  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
-  const nonPkCols = columns.filter(c => !c.primaryKey);
+  const { tableName, pkCol, nonPkCols } = getTableMeta(endpoints, resource);
   const ctrl = toPascal(resource);
   const controllerPkg = `${basePackage}.controller`;
   const jakartaPrefix = cfg.jakartaImport ? 'jakarta' : 'javax';

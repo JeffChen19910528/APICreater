@@ -1,5 +1,7 @@
 // ─── Python FastAPI Code Generator ───────────────────────────────────────────
 
+const { groupByResource, getTableMeta } = require('./shared');
+
 // ─── Version Configurations ───────────────────────────────────────────────────
 
 const PYTHON_VERSION_CONFIG = {
@@ -79,17 +81,6 @@ function toSnakeHandler(method, path) {
 
 function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-function groupByResource(apis) {
-  const groups = {};
-  for (const api of apis) {
-    const parts = api.path.replace(/^\//, '').split('/');
-    const resource = parts[0] || 'index';
-    if (!groups[resource]) groups[resource] = [];
-    groups[resource].push(api);
-  }
-  return groups;
 }
 
 // ─── Build Pydantic Model Fields ──────────────────────────────────────────────
@@ -188,12 +179,7 @@ function buildPythonDbEnv(dbConfig) {
 function buildPythonDbRouter(resource, endpoints, dbConfig) {
   const dbType = dbConfig.type;
   const isAsync = PYTHON_ASYNC_DB.includes(dbType);
-  const tableEndpoint = endpoints.find(ep => ep.tableName);
-  const tableName = tableEndpoint ? tableEndpoint.tableName : resource;
-  const columns = tableEndpoint ? (tableEndpoint.tableColumns || []) : [];
-  const pkCol = (columns.find(c => c.primaryKey) || {}).name || 'id';
-  const nonPkCols = columns.filter(c => !c.primaryKey);
-  const nonPkNames = nonPkCols.map(c => c.name);
+  const { tableName, pkCol, nonPkNames } = getTableMeta(endpoints, resource);
 
   let out = `from fastapi import APIRouter, HTTPException\n`;
   if (isAsync) {

@@ -8,7 +8,7 @@ const path = require('path');
 const { BASIC_APIS, MULTI_RESOURCE_APIS, NESTED_SCHEMA_APIS, ALL_TYPES_APIS, EMPTY_SCHEMA_APIS } = require('./fixtures/sampleApis');
 
 // 直接測試 Node.js builder（從 codeBuilder 中取得）
-const { generatePreview } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generatePreview } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 
 // ─── 工具 ─────────────────────────────────────────────────────────────────────
 

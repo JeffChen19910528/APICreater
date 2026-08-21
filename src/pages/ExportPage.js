@@ -25,7 +25,7 @@ const DEFAULT_PORTS = {
   java:   'http://localhost:8080/swagger-ui.html'
 };
 
-export default function ExportPage({ apis, projectName, language, version, onNavigate }) {
+export default function ExportPage({ apis, projectName, language, version, dbConfig, onNavigate }) {
   const [outputDir, setOutputDir] = useState('');
   const [status, setStatus] = useState(null);
   const [resultPath, setResultPath] = useState('');
@@ -47,7 +47,7 @@ export default function ExportPage({ apis, projectName, language, version, onNav
     try {
       if (!isElectron()) throw new Error('請在 Electron 桌面應用程式中使用此功能。');
       const result = await window.electronAPI.generateProject({
-        apis, projectName, language, version, outputDir
+        apis, projectName, language, version, outputDir, dbConfig
       });
       if (result.success) { setResultPath(result.projectPath); setStatus('success'); }
       else throw new Error(result.error);

@@ -176,9 +176,21 @@ npm run test:database  # 資料庫匯入功能（70 項測試）
 |------|------|
 | 桌面容器 | Electron v33 |
 | 前端 UI | React 18 |
-| 程式碼產生 | Node.js + EJS 樣板 |
+| 程式碼產生 | Node.js（純函式字串樣板） |
 | IPC 通訊 | Electron contextBridge |
 | 資料庫連線 | mysql2 / pg / mssql（主程序） |
+
+### 產生器架構
+
+所有程式碼產生邏輯集中於 `src/generator/`，且只有**一份**實作：
+
+- `buildFiles.js` — 純函式，無 `fs`/`path` 依賴，可同時被 Electron 主程序與瀏覽器端打包使用
+- `codeBuilder.js` — 主程序專用，呼叫 `buildFiles` 並寫入磁碟
+- `pythonBuilder.js` / `javaBuilder.js` / `csharpBuilder.js` — 各語言產生器
+- `shared.js` — 共用工具（資源分組、資料表欄位解析）
+- `dbSchemaReader.js` — 資料庫 schema 讀取，僅主程序使用
+
+`src/pages/CodePreview.js`（瀏覽器即時預覽）與匯出流程（Electron 主程序）直接呼叫同一個 `buildFiles()`，不再各自維護一份重複邏輯。
 
 ---
 
@@ -354,6 +366,18 @@ npm run test:database  # Database import feature (70 tests)
 |-------|-----------|
 | Desktop container | Electron v33 |
 | Frontend UI | React 18 |
-| Code generation | Node.js + EJS templates |
+| Code generation | Node.js (pure string builders) |
 | IPC communication | Electron contextBridge |
 | DB connectivity | mysql2 / pg / mssql (main process) |
+
+### Generator architecture
+
+All code-generation logic lives under `src/generator/`, with a **single implementation** shared by every consumer:
+
+- `buildFiles.js` — pure functions with no `fs`/`path` dependency, so it can be bundled for the browser as well as required directly by the Electron main process
+- `codeBuilder.js` — main-process-only wrapper that calls `buildFiles` and writes the result to disk
+- `pythonBuilder.js` / `javaBuilder.js` / `csharpBuilder.js` — per-language generators
+- `shared.js` — helpers shared across generators (resource grouping, table/column extraction)
+- `dbSchemaReader.js` — database schema introspection, main process only
+
+`src/pages/CodePreview.js` (the in-app live preview) and the export flow (Electron main process) both call the same `buildFiles()` — there is no separate, hand-maintained fallback implementation.

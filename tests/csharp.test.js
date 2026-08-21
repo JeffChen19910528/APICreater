@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 const path = require('path');
 
 const { BASIC_APIS, MULTI_RESOURCE_APIS, ALL_TYPES_APIS, EMPTY_SCHEMA_APIS, PATCH_APIS } = require('./fixtures/sampleApis');
-const { generatePreview } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generatePreview } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 
 async function getFiles(apis, projectName = 'TestProject') {
   return generatePreview({ apis, projectName, language: 'csharp', version: 'net8' });

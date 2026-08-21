@@ -5,7 +5,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 
-const { generatePreview } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generatePreview } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 const {
   BASIC_APIS,
   MULTI_RESOURCE_APIS,

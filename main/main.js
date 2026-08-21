@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { generateProject } = require('../generator/codeBuilder');
+const { generateProject } = require('../src/generator/codeBuilder');
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV === 'true';
 
@@ -74,7 +74,7 @@ ipcMain.handle('select-sqlite-file', async () => {
 // IPC: 連接資料庫並讀取 Schema
 ipcMain.handle('db-connect', async (event, dbConfig) => {
   try {
-    const { connectAndGetSchema } = require('../generator/dbSchemaReader');
+    const { connectAndGetSchema } = require('../src/generator/dbSchemaReader');
     const schema = await connectAndGetSchema(dbConfig);
     return { success: true, schema };
   } catch (err) {
@@ -96,7 +96,7 @@ ipcMain.handle('generate-project', async (event, { apis, projectName, language, 
 // IPC: 產生程式碼預覽（不寫檔案）
 ipcMain.handle('preview-code', async (event, { apis, projectName, language, version, dbConfig }) => {
   try {
-    const { generatePreview } = require('../generator/codeBuilder');
+    const { generatePreview } = require('../src/generator/codeBuilder');
     const preview = await generatePreview({ apis, projectName, language, version, dbConfig });
     return { success: true, preview };
   } catch (err) {

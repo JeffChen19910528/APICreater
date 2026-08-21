@@ -68,12 +68,15 @@ desktop-api-generator/
   main/
     main.js            — Electron 主程序（BrowserWindow、IPC handlers）
     preload.js         — contextBridge 安全橋接
-  generator/
-    codeBuilder.js     — 入口：依 language + version 分派到各 builder
-    pythonBuilder.js   — Python FastAPI 產生器（Pydantic v1 / v2 / legacy）
-    csharpBuilder.js   — C# ASP.NET Core 產生器（net8 / net6 / net5 / net31）
-    javaBuilder.js     — Java Spring Boot 產生器（springboot3 / springboot2）
   src/
+    generator/
+      buildFiles.js    — 純函式產生器（無 fs 依賴，瀏覽器與主程序共用）
+      codeBuilder.js   — 主程序專用：呼叫 buildFiles 並寫入磁碟
+      shared.js        — 各語言 builder 共用工具（groupByResource、資料表欄位解析）
+      pythonBuilder.js — Python FastAPI 產生器（Pydantic v1 / v2 / legacy）
+      csharpBuilder.js — C# ASP.NET Core 產生器（net8 / net6 / net5 / net31）
+      javaBuilder.js   — Java Spring Boot 產生器（springboot3 / springboot2）
+      dbSchemaReader.js — 資料庫 schema 讀取（主程序專用，不會被打包進瀏覽器端）
     App.js             — 頁面路由，管理 language + version state
     utils/
       versions.js      — 各語言可選版本設定（value / label / badge / description）
@@ -82,7 +85,7 @@ desktop-api-generator/
       SchemaBuilder.js — JSON Schema 視覺化編輯（nested object 支援）
     pages/
       ApiDesigner.js   — API 列表 + Method/Path/Schema 表單
-      CodePreview.js   — 多語言語法高亮、檔案樹瀏覽（依 version 更新）
+      CodePreview.js   — 多語言語法高亮、檔案樹瀏覽（直接 import buildFiles，與匯出共用同一份產生邏輯）
       ExportPage.js    — 版本資訊顯示 + 選路徑 → 一鍵產生專案
   tests/
     run-tests.js       — 測試執行器（132 項，含版本差異測試）
@@ -229,13 +232,13 @@ node tests/run-tests.js
 
 - 使用 **Electron + React（CRA）** 架構，不改變為 Vite
 - npm install 一律加 `--legacy-peer-deps`
-- UI 與 generator 完全分離（`generator/` 目錄純 Node.js，不 import React）
-- 各語言 generator 各自獨立檔案，在 `codeBuilder.js` 統一分派
+- UI 與 generator 邏輯分離，但共用同一份程式碼：`src/generator/buildFiles.js` 是唯一的產生邏輯來源，不依賴 `fs`/`path`，Electron 主程序（透過 `codeBuilder.js`）與瀏覽器端 `CodePreview.js` 都直接 import 它 — 兩者不可各自再實作一份 fallback
+- 各語言 generator 各自獨立檔案，在 `buildFiles.js` 的 `buildFiles()` 統一分派
 - **版本邏輯在 generator 層實作**，UI 只傳 `version` 字串（例如 `'pydantic2'`）
 - 版本設定集中在 `src/utils/versions.js`（UI 用）與各 builder 的 `VERSION_CONFIG`（generator 用）
 - 所有 API 設定可序列化為 JSON
 - IPC 透過 `preload.js` contextBridge 橋接，不開 `nodeIntegration`
 - CSS 採每個元件獨立 `.css` 檔案，暗色主題（`#0f1117` 背景）
-- CodePreview.js 含 browser fallback（不依賴 Electron 也能預覽）
-- 新增語言：新增 `xxxBuilder.js` + 在 `codeBuilder.js` 加 case + `versions.js` 加語言設定 + `Sidebar.js` 加按鈕 + `ExportPage.js` 加標籤/指令/Port + `CodePreview.js` 加語法高亮/fallback/file group
+- `src/generator/` 底下的檔案會被 CRA 打包進瀏覽器端，因此**不可** import `fs`/`path` 或任何 Node-only 套件（`dbSchemaReader.js` 例外，它只被 `main/main.js` 用 `require` 載入，不會進入 React 打包圖）
+- 新增語言：新增 `xxxBuilder.js` + 在 `buildFiles.js` 的 `buildFiles()` 加 case + `versions.js` 加語言設定 + `Sidebar.js` 加按鈕 + `ExportPage.js` 加標籤/指令/Port + `CodePreview.js` 加語法高亮/file group
 - 新增版本：在對應 builder 的 `VERSION_CONFIG` 加新 key + `versions.js` 加版本卡片

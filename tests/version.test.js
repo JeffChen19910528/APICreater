@@ -6,7 +6,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 
-const { generatePreview } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generatePreview } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 const { BASIC_APIS, ALL_TYPES_APIS } = require('./fixtures/sampleApis');
 
 // ─── Node.js 版本差異 ─────────────────────────────────────────────────────────

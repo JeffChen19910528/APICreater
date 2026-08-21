@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const { generateProject } = require(path.join(__dirname, '../generator/codeBuilder'));
+const { generateProject } = require(path.join(__dirname, '../src/generator/codeBuilder'));
 const { BASIC_APIS, MULTI_RESOURCE_APIS } = require('./fixtures/sampleApis');
 
 // 臨時輸出目錄

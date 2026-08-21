@@ -19,6 +19,10 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code recovery checkpoints
+.claude_recovery/
+RESUME.md
+
 # Env
 .env
 .env.local
